@@ -68,7 +68,7 @@ class SearchService:
             )
 
             payload = json.loads(cached)
-            # payload["query"] = query
+            # payload["query"] = normalized
 
             # Echo the caller's original query.
             return payload
@@ -99,7 +99,7 @@ class SearchService:
         ]
 
         response = {
-            "query": query,
+            "query": normalized,
             "results": results,
         }
 

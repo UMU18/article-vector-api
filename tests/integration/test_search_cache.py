@@ -44,7 +44,7 @@ def test_search_roundtrip_and_cache_key(api_client, redis_client):
     # Second request is served from cache: identical body.
     second = api_client.get(
         "/api/v1/articles/search",
-        params={"q": query},
+        params={"q": query.upper()},
     )
 
     assert second.status_code == 200
