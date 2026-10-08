@@ -1,0 +1,168 @@
+name: article-vector-api
+
+x-app-environment: &app-environment
+  APP_ENV: ${APP_ENV:-development}
+  APP_NAME: ${APP_NAME:-article-vector-api}
+  LOG_LEVEL: ${LOG_LEVEL:-INFO}
+  LOG_FORMAT: ${LOG_FORMAT:-json}
+  POSTGRES_HOST: postgres
+  POSTGRES_PORT: "5432"
+  POSTGRES_DB: ${POSTGRES_DB:-articles}
+  POSTGRES_USER: ${POSTGRES_USER:-postgres}
+  POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+  REDIS_HOST: redis
+  REDIS_PORT: "6379"
+  REDIS_DB: ${REDIS_DB:-0}
+  RABBITMQ_HOST: rabbitmq
+  RABBITMQ_PORT: "5672"
+  RABBITMQ_USER: ${RABBITMQ_USER:-guest}
+  RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD:-guest}
+  RABBITMQ_VHOST: ${RABBITMQ_VHOST:-/}
+  QDRANT_HOST: qdrant
+  QDRANT_PORT: "6333"
+  QDRANT_COLLECTION: ${QDRANT_COLLECTION:-articles}
+  EMBEDDING_DIMENSION: ${EMBEDDING_DIMENSION:-128}
+  EMBEDDING_TIMEOUT_SECONDS: ${EMBEDDING_TIMEOUT_SECONDS:-5}
+  CELERY_MAX_RETRIES: ${CELERY_MAX_RETRIES:-3}
+  CELERY_RETRY_BACKOFF: ${CELERY_RETRY_BACKOFF:-true}
+  CELERY_RETRY_BACKOFF_MAX: ${CELERY_RETRY_BACKOFF_MAX:-60}
+  CELERY_TASK_SOFT_TIME_LIMIT: ${CELERY_TASK_SOFT_TIME_LIMIT:-30}
+  CELERY_TASK_TIME_LIMIT: ${CELERY_TASK_TIME_LIMIT:-60}
+  CELERY_RESULT_BACKEND_DB: ${CELERY_RESULT_BACKEND_DB:-1}
+  SEARCH_CACHE_TTL: ${SEARCH_CACHE_TTL:-300}
+  SEARCH_TOP_K: ${SEARCH_TOP_K:-10}
+  FAKER_LOCALE: ${FAKER_LOCALE:-id_ID}
+
+services:
+  # ---------------------------------------------------------------------------
+  # REST API
+  # ---------------------------------------------------------------------------
+  api:
+    build: .
+    container_name: article-api
+    command: >
+      sh -c "python docker/wait_for_dependencies.py &&
+             alembic upgrade head &&
+             uvicorn app.main:app --host 0.0.0.0 --port 8000"
+    environment: *app-environment
+    ports:
+      - "${API_HOST_PORT:-8000}:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      qdrant:
+        condition: service_started
+    restart: unless-stopped
+
+  # ---------------------------------------------------------------------------
+  # Celery worker (embedding pipeline)
+  # ---------------------------------------------------------------------------
+  worker:
+    build: .
+    container_name: article-worker
+    # The worker waits until the articles table exists (api runs the migration
+    # first) so two containers never race the Alembic lock.
+    command: >
+      sh -c "python docker/wait_for_dependencies.py --wait-table &&
+             celery -A app.workers.article_worker:celery_app worker
+                    --loglevel=INFO --concurrency=2 --queues=articles"
+    environment: *app-environment
+    depends_on:
+      postgres:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      qdrant:
+        condition: service_started
+    restart: unless-stopped
+
+  # ---------------------------------------------------------------------------
+  # Flower (optional): docker compose --profile monitoring up -d flower
+  # ---------------------------------------------------------------------------
+  flower:
+    build: .
+    container_name: article-flower
+    profiles: [ "monitoring" ]
+    command: >
+      sh -c "python docker/wait_for_dependencies.py --skip-all-but-broker &&
+             celery -A app.workers.article_worker:celery_app flower --port=5555"
+    environment: *app-environment
+    ports:
+      - "${FLOWER_HOST_PORT:-5555}:5555"
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+    restart: unless-stopped
+
+  # ---------------------------------------------------------------------------
+  # Infrastructure
+  # ---------------------------------------------------------------------------
+  postgres:
+    image: postgres:16-alpine
+    container_name: article-postgres
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-articles}
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres} -d ${POSTGRES_DB:-articles}" ]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+
+  rabbitmq:
+    image: rabbitmq:3.13-management-alpine
+    container_name: article-rabbitmq
+    environment:
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER:-guest}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD:-guest}
+      RABBITMQ_DEFAULT_VHOST: ${RABBITMQ_VHOST:-/}
+    ports:
+      - "${RABBITMQ_HOST_PORT:-5672}:5672"
+      - "${RABBITMQ_MGMT_HOST_PORT:-15672}:15672"
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
+    healthcheck:
+      test: [ "CMD", "rabbitmq-diagnostics", "-q", "ping" ]
+      interval: 10s
+      timeout: 10s
+      retries: 10
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    container_name: article-redis
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+    healthcheck:
+      test: [ "CMD", "redis-cli", "ping" ]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    restart: unless-stopped
+
+  qdrant:
+    image: qdrant/qdrant:v1.14.1
+    container_name: article-qdrant
+    ports:
+      - "${QDRANT_HOST_PORT:-6333}:6333"
+      - "${QDRANT_GRPC_HOST_PORT:-6334}:6334"
+    volumes:
+      - qdrant_storage:/qdrant/storage
+    restart: unless-stopped
+
+volumes:
+  pgdata:
+  rabbitmq_data:
+  qdrant_storage:
