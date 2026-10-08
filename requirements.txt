@@ -16,3 +16,4 @@ flower==2.2.0
 # Testing
 httpx==0.28.1
 pytest==9.0.2
+pytest-repeat==0.9.4
