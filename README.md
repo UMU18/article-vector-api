@@ -191,7 +191,7 @@ curl -s "localhost:8000/api/v1/articles/search?q=artificial%20intelligence"
 
 ## 7. Database Migration
 
-Migrations are the *only* sanctioned way to change the schema (PRD §17).
+Migrations are the *only* sanctioned way to change the schema.
 The `api` container applies them automatically on boot; the `worker`
 container waits for the resulting `articles` table before starting.
 
@@ -201,7 +201,7 @@ docker compose exec api alembic downgrade -1      # roll back one step
 docker compose exec api alembic history           # list revisions
 ```
 
-Initial revision `0001` creates the `articles` table exactly per PRD §15:
+Initial revision `0001` creates the `articles` table exactly:
 `id UUID PK`, `title`, `content`, `author` (TEXT), `status article_status`
 ENUM (`pending|processing|completed|failed`), `embedding_id UUID NULL`,
 `error_message TEXT NULL`, `retry_count INTEGER`, `created_at`, `updated_at`,
@@ -224,7 +224,7 @@ Interactive OpenAPI documentation ships with FastAPI:
 | GET | `/health` | Liveness | 200 |
 | GET | `/health/ready` | Postgres/Redis/RabbitMQ/Qdrant probes | 200 / 503 |
 
-Every error uses the PRD envelope and never leaks stack traces:
+Every error follows a consistent error response format and never exposes stack traces:
 
 ```json
 {"error": {"code": "ARTICLE_NOT_FOUND", "message": "Article not found"}}
@@ -305,7 +305,7 @@ pytest tests/integration -m integration -v  # requires `docker compose up`
 ## 12. Retry Strategy
 
 `generate_mock_embedding()` simulates an unreliable AI vendor
-(PRD §10): **30%** `EmbeddingAPIError`, **20%** a 5.5–8 s stall that always
+: **30%** `EmbeddingAPIError`, **20%** a 5.5–8 s stall that always
 trips the **5 s** `EMBEDDING_TIMEOUT_SECONDS` thread-based timeout, **50%**
 success. Both failure classes are transient and retried.
 
@@ -321,7 +321,7 @@ Attempt 4 → permanent failure → DLQ
 
 While any retry remains, the article stays in `processing`
 (`retry_count` is tracked on each attempt) — it only becomes `failed` after
-the final attempt, exactly as the PRD state diagram requires.
+the final attempt.
 
 ## 13. DLQ Strategy
 
@@ -352,7 +352,7 @@ are also surfaced as `FAILURE` in the result backend for Flower.
 
 - Cache key: `article-search:{normalized_query}` where normalization is
   trim → lowercase → collapse whitespace, so `"  Artificial   Intelligence "`
-  and `"artificial intelligence"` share one entry (PRD §20).
+  and `"artificial intelligence"` share one entry.
 - TTL: `SEARCH_CACHE_TTL=300` seconds (5 minutes).
 - On hit the cached payload is returned verbatim (only `query` is re-echoed
   as the caller sent it); on miss the flow is embed → Qdrant search →
@@ -369,11 +369,11 @@ are also surfaced as `FAILURE` in the result backend for Flower.
 - One point per article; the point id is a fresh UUID stored back into
   `articles.embedding_id` (PostgreSQL remains the source of truth, Qdrant is
   only a rebuildable search index).
-- Minimal payload per PRD §14: `{"article_id", "title", "author"}`.
+- Minimal payload: `{"article_id", "title", "author"}`.
 - Reads return `top_k=10` hits mapped to
   `{article_id, title, author, score(round 4)}`.
 - Qdrant errors are translated to `DependencyUnavailableError` → HTTP 503 /
-  worker transient retry (Scenario 3 in PRD §31).
+  worker transient retry.
 
 ## 16. Architecture Decision Record
 
@@ -389,7 +389,7 @@ Full records live in [`docs/adr/`](docs/adr):
 
 ## 17. Qdrant Downtime Scenario
 
-If Qdrant is down for 3 hours while ingestion continues (PRD §32):
+If Qdrant is down for 3 hours while ingestion continues:
 
 1. The API keeps accepting articles — `POST` only touches PostgreSQL and
    RabbitMQ, so `202 Accepted` responses continue and **no article is lost**.
@@ -398,7 +398,7 @@ If Qdrant is down for 3 hours while ingestion continues (PRD §32):
 3. RabbitMQ buffers the ingestion backlog meanwhile; nothing is dropped.
 4. Recovery options: replay the DLQ (re-publish `articles.dead` messages)
    or add a reconciliation job that re-dispatches `embedding_id IS NULL`
-   articles. The recommended production evolution (PRD §33) is to split
+   articles. The recommended production evolution is to split
    `article_status` from `embedding_status` so articles stay consumable
    while their embeddings are still pending.
 
@@ -443,7 +443,7 @@ If Qdrant is down for 3 hours while ingestion continues (PRD §32):
 - **Repository methods commit per call** (no unit-of-work). Simpler and safe
   for this scale; transactions-per-aggregate would be the next refinement.
 - **`status` couples article and embedding state** (per assignment scope).
-  PRD §33's split into `article_status`/`embedding_status` is the better
+  split into `article_status`/`embedding_status` is the better
   production design and is sketched in ADR-0005/Future Improvements.
 - **Explicit DLQ publish + broker DLX** double-covers failures at the cost
   of a small dedup consideration on replay.
@@ -455,7 +455,7 @@ If Qdrant is down for 3 hours while ingestion continues (PRD §32):
 
 ## 20. Future Improvements
 
-1. Split `embedding_status` from `article_status` (PRD §33) plus a
+1. Split `embedding_status` from `article_status` plus a
    `POST /articles/{id}/reprocess` endpoint that requeues failed embeddings.
 2. Replace the mock with a real embedding provider behind the same
    `EmbeddingService` port; add response caching for query embeddings.

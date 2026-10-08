@@ -2,7 +2,7 @@
 
 - **Status:** Accepted
 - **Date:** 2026-01-01
-- **Context:** PRD §12 requires retries with exponential backoff (2 s, 4 s,
+- **Context:** Requires retries with exponential backoff (2 s, 4 s,
   8 s, then permanent failure) and §13 requires dead-lettering of messages
   that exhausted their retries, while the article must remain `processing`
   during retries and only become `failed` afterwards (§7).
@@ -31,9 +31,7 @@
 
 ## Alternatives considered
 
-- **Celery `autoretry_for` + `retry_backoff`:** convenient but the PRD's
-  exact 2/4/8 cadence, per-attempt status bookkeeping and DLQ hand-off are
-  clearer and stricter with explicit orchestration.
+- **Celery `autoretry_for` + `retry_backoff`:** convenient, but explicit orchestration provides clearer and stricter control over the exact 2/4/8 retry cadence, per-attempt status tracking, and DLQ hand-off.
 - **DLX only (no explicit publish):** depends on reject-path semantics of
   the Celery/ack mode; the explicit publish makes the DLQ contract visible,
   testable and broker-agnostic.

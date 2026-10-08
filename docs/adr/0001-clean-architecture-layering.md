@@ -2,7 +2,7 @@
 
 - **Status:** Accepted
 - **Date:** 2026-01-01
-- **Context:** PRD §27 requires a modular/clean architecture where business
+- **Context:** Requires a modular/clean architecture where business
   logic does not depend directly on FastAPI, Redis, RabbitMQ, Qdrant or
   SQLAlchemy, and where infrastructure implements interfaces needed by the
   application/domain.
@@ -37,4 +37,4 @@ Infrastructure (SQLAlchemy repo, RedisCache, QdrantVectorRepository,
   touches only the adapter layer.
 - Cost: slightly more indirection and mapping boilerplate between ORM models
   and domain entities — accepted for the testability and substitutability
-  gains (PRD §27 lists the same four goals).
+  gains.

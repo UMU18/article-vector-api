@@ -2,7 +2,7 @@
 
 - **Status:** Accepted
 - **Date:** 2026-01-01
-- **Context:** PRD §14 states PostgreSQL remains the source of truth while
+- **Context:** PostgreSQL remains the source of truth while
   Qdrant is used for vector search; §32/§33 discuss what happens when Qdrant
   is unavailable and recommend separating article status from embedding
   status in production.

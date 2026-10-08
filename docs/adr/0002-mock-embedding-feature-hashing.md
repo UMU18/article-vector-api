@@ -2,7 +2,7 @@
 
 - **Status:** Accepted
 - **Date:** 2026-01-01
-- **Context:** PRD §9 requires `generate_mock_embedding(text) -> list[float]`
+- **Context:** Requires `generate_mock_embedding(text) -> list[float]`
   with exactly 128 dimensions, and §10 requires it to simulate an unreliable
   external AI API (30% error, 20% delay > 5 s, 50% success) so that timeout
   and retry machinery can be exercised for real.

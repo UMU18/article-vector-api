@@ -2,7 +2,7 @@
 
 - **Status:** Accepted
 - **Date:** 2026-01-01
-- **Context:** PRD §18–21 require Redis caching of search results with the
+- **Context:** Require Redis caching of search results with the
   key `article-search:{normalized_query}`, normalization
   (trim/lowercase/collapse whitespace) and a TTL of 5 minutes
   (`SEARCH_CACHE_TTL=300`).
@@ -13,9 +13,7 @@
   `article-search:{normalized}`.
 - **Cache hit:** return the stored payload (only `query` is replaced with
   the caller's original spelling), skipping embedding + Qdrant entirely.
-- **Cache miss:** embed query (deterministic path, see ADR-0002) → Qdrant
-  similarity search → serialize the PRD response → `SET` with TTL 300 →
-  respond.
+- **Cache miss:** embed the query (deterministic path, see ADR-0002) → Qdrant similarity search → serialize the response → SET with a TTL of 300 seconds → respond.
 - **Failure mode:** every cache read/write is wrapped — Redis errors are
   logged (`search.cache.unavailable`) and treated as a miss/no-op. The cache
   can never take search down; it only optimizes it.
